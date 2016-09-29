@@ -120,7 +120,9 @@ class KNearestNeighbor(object):
     #########################################################################
     # http://stackoverflow.com/questions/23983748/possible-optimizations-for-calculating-squared-euclidean-distance/23984007#23984007
     train_square = np.sum(np.square(self.X_train), axis=1)
-    test_square = np.sum(np.square(X), axis=1).reshape(num_test, 1)
+    # reshape test_square for broadcasting later. np.newaxis can avoid manually writing dimensional tuple
+    # np.sum(np.square(X), axis=1).reshape(num_test, 1) would work as well.
+    test_square = np.sum(np.square(X), axis=1)[:, np.newaxis]
     train_dot_test = X.dot(self.X_train.T)
 
     dists = np.sqrt(train_square - 2 * train_dot_test + test_square)
