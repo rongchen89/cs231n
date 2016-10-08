@@ -34,6 +34,11 @@ class TwoLayerNet(object):
     - output_size: The number of classes C.
     """
     self.params = {}
+    """
+    # try Xavier Init
+    std1 = np.sqrt(2.0 / input_size)
+    std2 = np.sqrt(2.0 / hidden_size)
+    """
     self.params['W1'] = std * np.random.randn(input_size, hidden_size)
     self.params['b1'] = np.zeros(hidden_size)
     self.params['W2'] = std * np.random.randn(hidden_size, output_size)
