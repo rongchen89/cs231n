@@ -105,7 +105,10 @@ class TwoLayerNet(object):
     ############################################################################
     reg = self.reg
 
+    loss, dloss = softmax_loss(scores, y)
+    loss += 0.5 * reg * (np.sum(W1 * W1) + np.sum(W2 * W2))
 
+    dh, dW2, db2 = affine_backward(dloss, s_cache)
     grads["b2"] = db2
     grads["W2"] = dW2 + reg * W2
 
@@ -178,6 +181,7 @@ class FullyConnectedNet(object):
     # parameters should be initialized to zero.                                #
     ############################################################################
     all_dims = [input_dim] + hidden_dims + [num_classes]
+    for i in xrange(self.num_layers):
         weight_name = 'W' + str(i + 1)
         self.params[weight_name] = weight_scale * np.random.randn(all_dims[i], all_dims[i+1])
         bias_name = 'b' + str(i + 1)
@@ -240,6 +244,25 @@ class FullyConnectedNet(object):
     # layer, etc.                                                              #
     ############################################################################
     # Unpack variables from the params dictionary
+    reg = self.reg
+    weights = sorted(self.params)[:len(sorted(self.params)) / 2]
+    biases = sorted(self.params)[len(sorted(self.params)) / 2:]
+    caches = []
+    reg_loss = []
+    out = X
+
+    for weight, bias in zip(weights[:-1], biases[:-1]):
+        W, b = self.params[weight], self.params[bias]
+        out, cache = affine_relu_forward(out, W, b)
+        caches.append(cache)
+        reg_loss.append(0.5 * reg * np.sum(W * W))
+
+    # handle last layer differently
+    last_weight, last_bias = weights[-1], biases[-1]
+    last_W, last_b = self.params[last_weight], self.params[last_bias]
+    scores, cache = affine_forward(out, last_W, last_b)
+    caches.append(cache)
+    reg_loss.append(0.5 * reg * np.sum(last_W * last_W))
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -262,7 +285,18 @@ class FullyConnectedNet(object):
     # automated tests, make sure that your L2 regularization includes a factor #
     # of 0.5 to simplify the expression for the gradient.                      #
     ############################################################################
-    pass
+    loss, dloss = softmax_loss(scores, y)
+    loss += np.sum(reg_loss)
+
+    dx, dW, db = affine_backward(dloss, caches[-1])
+    grads[last_bias] = db
+    grads[last_weight] = dW + reg * last_W
+
+    for weight, bias, cache in reversed(zip(weights[:-1], biases[:-1], caches[:-1])):
+        W = self.params[weight]
+        dx, dW, db = affine_relu_backward(dx, cache)
+        grads[bias] = db
+        grads[weight] = dW + reg * W
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
