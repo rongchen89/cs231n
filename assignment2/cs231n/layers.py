@@ -160,7 +160,7 @@ def batchnorm_forward(x, gamma, beta, bn_param):
   out, cache = None, None
   if mode == 'train':
     #############################################################################
-    # TODO: Implement the training-time forward pass for batch normalization.   #
+    # Implement the training-time forward pass for batch normalization.   #
     # Use minibatch statistics to compute the mean and variance, use these      #
     # statistics to normalize the incoming data, and scale and shift the        #
     # normalized data using gamma and beta.                                     #
@@ -172,18 +172,39 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     # the momentum variable to update the running mean and running variance,    #
     # storing your result in the running_mean and running_var variables.        #
     #############################################################################
-    pass
+    # step 1: calculate mean
+    sample_mean = 1.0 / N * np.sum(x, axis = 0)
+    # step 2: subtract mean
+    x_centered = x - sample_mean
+    # step 3: prepare to calculate denominator(std)
+    x_centered_square = x_centered ** 2
+    # step 4: calcaute variance
+    sample_var = 1.0 / N * np.sum(x_centered_square, axis=0)
+    # step 5: add eps for numerical stability, then sqrt
+    sample_var_sqrt = np.sqrt(sample_var + eps)
+    # step 6: invert sample_var_sqrt
+    inv_sqrt = 1.0 / sample_var_sqrt
+    # step 7: execute normalization transform
+    x_bn = x_centered * inv_sqrt
+    # step 8: output (actually two steps)
+    out = gamma * x_bn + beta
+
+    cache = (x, x_bn, gamma, sample_mean, x_centered, inv_sqrt, sample_var_sqrt, sample_var, eps)
+
+    running_mean = momentum * running_mean + (1 - momentum) * sample_mean
+    running_var = momentum * running_var + (1 - momentum) * sample_var
     #############################################################################
     #                             END OF YOUR CODE                              #
     #############################################################################
   elif mode == 'test':
     #############################################################################
-    # TODO: Implement the test-time forward pass for batch normalization. Use   #
+    # Implement the test-time forward pass for batch normalization. Use   #
     # the running mean and variance to normalize the incoming data, then scale  #
     # and shift the normalized data using gamma and beta. Store the result in   #
     # the out variable.                                                         #
     #############################################################################
-    pass
+    x_test_bn = (x - running_mean) / np.sqrt(running_var + eps)
+    out = gamma * x_test_bn + beta
     #############################################################################
     #                             END OF YOUR CODE                              #
     #############################################################################
@@ -216,10 +237,31 @@ def batchnorm_backward(dout, cache):
   """
   dx, dgamma, dbeta = None, None, None
   #############################################################################
-  # TODO: Implement the backward pass for batch normalization. Store the      #
+  # Implement the backward pass for batch normalization. Store the      #
   # results in the dx, dgamma, and dbeta variables.                           #
   #############################################################################
-  pass
+  N, D = dout.shape
+  x, x_bn, gamma, sample_mean, x_centered, inv_sqrt, sample_var_sqrt, sample_var, eps = cache
+  # step 8: output (actually two steps)
+  dbeta = np.sum(dout, axis=0)
+  dgamma = np.sum(dout * x_bn, axis=0)
+  dx_bn = dout * gamma
+  # step 7: execute normalization transform
+  dx_centered = dx_bn * inv_sqrt
+  dinv_sqrt = np.sum(dx_bn * x_centered, axis=0)
+  # step 6: invert sample_var_sqrt
+  dsample_var_sqrt = -1.0 / (sample_var_sqrt ** 2) * dinv_sqrt
+  # step 5: add eps for numerical stability, then sqrt
+  dsample_var = 0.5 * (1 / np.sqrt(sample_var + eps)) * dsample_var_sqrt
+  # step 4: calcaute variance
+  dx_centered_square = 1.0 / N * np.ones((N, D)) * dsample_var
+  # step 3: prepare to calculate denominator(std)
+  dx_centered += 2.0 * x_centered * dx_centered_square
+  # step 2: subtract mean
+  dx = 1.0 * dx_centered
+  dsample_mean = np.sum(-1.0 * dx_centered, axis=0)
+  # step 1: calculate mean
+  dx += 1.0 / N * np.ones((N, D)) * dsample_mean
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
@@ -242,14 +284,21 @@ def batchnorm_backward_alt(dout, cache):
   """
   dx, dgamma, dbeta = None, None, None
   #############################################################################
-  # TODO: Implement the backward pass for batch normalization. Store the      #
+  # Implement the backward pass for batch normalization. Store the      #
   # results in the dx, dgamma, and dbeta variables.                           #
   #                                                                           #
   # After computing the gradient with respect to the centered inputs, you     #
   # should be able to compute gradients with respect to the inputs in a       #
   # single statement; our implementation fits on a single 80-character line.  #
   #############################################################################
-  pass
+  N,D = dout.shape
+  x, x_bn, gamma, sample_mean, x_centered, inv_sqrt, sample_var_sqrt, sample_var, eps = cache
+  dbeta = np.sum(dout, axis=0)
+  dgamma = np.sum(dout * x_bn, axis=0)
+  # http://cthorey.github.io/backpropagation/
+  dx = (1.0 / N) * gamma * (sample_var + eps) ** (-1.0 / 2) \
+    * (N * dout - np.sum(dout, axis=0) - (x - sample_mean) * (sample_var + eps) ** (-1.0) \
+    * np.sum(dout * (x - sample_mean), axis=0))
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
@@ -285,18 +334,20 @@ def dropout_forward(x, dropout_param):
 
   if mode == 'train':
     ###########################################################################
-    # TODO: Implement the training phase forward pass for inverted dropout.   #
+    # Implement the training phase forward pass for inverted dropout.   #
     # Store the dropout mask in the mask variable.                            #
     ###########################################################################
-    pass
+    # Note that p is probability being dropped
+    mask = (np.random.rand(*x.shape) < (1 - p)) / (1 - p)
+    out = x * mask
     ###########################################################################
     #                            END OF YOUR CODE                             #
     ###########################################################################
   elif mode == 'test':
     ###########################################################################
-    # TODO: Implement the test phase forward pass for inverted dropout.       #
+    # Implement the test phase forward pass for inverted dropout.       #
     ###########################################################################
-    pass
+    out = x
     ###########################################################################
     #                            END OF YOUR CODE                             #
     ###########################################################################
@@ -321,9 +372,9 @@ def dropout_backward(dout, cache):
   dx = None
   if mode == 'train':
     ###########################################################################
-    # TODO: Implement the training phase backward pass for inverted dropout.  #
+    # Implement the training phase backward pass for inverted dropout.  #
     ###########################################################################
-    pass
+    dx = mask * dout
     ###########################################################################
     #                            END OF YOUR CODE                             #
     ###########################################################################

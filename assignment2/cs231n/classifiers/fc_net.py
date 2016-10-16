@@ -182,10 +182,12 @@ class FullyConnectedNet(object):
     ############################################################################
     all_dims = [input_dim] + hidden_dims + [num_classes]
     for i in xrange(self.num_layers):
-        weight_name = 'W' + str(i + 1)
-        self.params[weight_name] = weight_scale * np.random.randn(all_dims[i], all_dims[i+1])
-        bias_name = 'b' + str(i + 1)
-        self.params[bias_name] = np.zeros(all_dims[i+1])
+        self.params['W' + str(i+1)] = weight_scale * np.random.randn(all_dims[i], all_dims[i+1])
+        self.params['b' + str(i+1)] = np.zeros(all_dims[i+1])
+
+        if self.use_batchnorm and i < len(hidden_dims):
+            self.params['gamma' + str(i+1)] = np.ones(hidden_dims[i])
+            self.params['beta' + str(i+1)] = np.zeros(hidden_dims[i])
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -245,20 +247,29 @@ class FullyConnectedNet(object):
     ############################################################################
     # Unpack variables from the params dictionary
     reg = self.reg
-    weights = sorted(self.params)[:len(sorted(self.params)) / 2]
-    biases = sorted(self.params)[len(sorted(self.params)) / 2:]
+    num_layers = self.num_layers
     caches = []
+    dropout_caches = []
     reg_loss = []
     out = X
 
-    for weight, bias in zip(weights[:-1], biases[:-1]):
-        W, b = self.params[weight], self.params[bias]
-        out, cache = affine_relu_forward(out, W, b)
+    for i in xrange(1, num_layers):
+        W, b = self.params['W' + str(i)], self.params['b' + str(i)]
+        if self.use_batchnorm:
+            gamma, beta, bn_param = self.params['gamma' + str(i)], self.params['beta' + str(i)], self.bn_params[i - 1]
+            out, cache = affine_bn_relu_forward(out, W, b, gamma, beta, bn_param)
+        else:
+            out, cache = affine_relu_forward(out, W, b)
+
+        if self.use_dropout:
+            out, dropout_cache = dropout_forward(out, self.dropout_param)
+            dropout_caches.append(dropout_cache)
+
         caches.append(cache)
         reg_loss.append(0.5 * reg * np.sum(W * W))
 
     # handle last layer differently
-    last_weight, last_bias = weights[-1], biases[-1]
+    last_weight, last_bias = 'W' + str(num_layers), 'b' + str(num_layers)
     last_W, last_b = self.params[last_weight], self.params[last_bias]
     scores, cache = affine_forward(out, last_W, last_b)
     caches.append(cache)
@@ -292,13 +303,56 @@ class FullyConnectedNet(object):
     grads[last_bias] = db
     grads[last_weight] = dW + reg * last_W
 
-    for weight, bias, cache in reversed(zip(weights[:-1], biases[:-1], caches[:-1])):
-        W = self.params[weight]
-        dx, dW, db = affine_relu_backward(dx, cache)
-        grads[bias] = db
-        grads[weight] = dW + reg * W
+    for i in xrange(num_layers-1, 0, -1):
+        if self.use_dropout:
+            dx = dropout_backward(dx, dropout_caches[i - 1])
+
+        W = self.params['W' + str(i)]
+        if self.use_batchnorm:
+            dx, dW, db, dgamma, dbeta = affine_bn_relu_backward(dx, caches[i-1])
+            grads['b' + str(i)] = db
+            grads['W' + str(i)] = dW + reg * W
+            grads['gamma' + str(i)] = dgamma
+            grads['beta' + str(i)] = dbeta
+        else:
+            dx, dW, db = affine_relu_backward(dx, caches[i-1])
+            grads['b' + str(i)] = db
+            grads['W' + str(i)] = dW + reg * W
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
 
     return loss, grads
+
+
+def affine_bn_relu_forward(x, w, b, gamma, beta, bn_param):
+  """
+  Convenience layer that perorms an affine transform ,batch normalization followed by a ReLU
+
+  Inputs:
+  - x: Input to the affine layer
+  - w, b: Weights for the affine layer
+  - gamma: Scale parameter for batch normalization
+  - beta: Shift parameter for batch normalization
+  - bn_param: parameter for batch normalization
+
+  Returns a tuple of:
+  - out: Output from the ReLU
+  - cache: Object to give to the backward pass
+  """
+  a, fc_cache = affine_forward(x, w, b)
+  bn, bn_cache = batchnorm_forward(a, gamma, beta, bn_param)
+  out, relu_cache = relu_forward(bn)
+  cache = (fc_cache, bn_cache, relu_cache)
+  return out, cache
+
+
+def affine_bn_relu_backward(dout, cache):
+  """
+  Backward pass for the affine-bn-relu convenience layer
+  """
+  fc_cache, bn_cache, relu_cache = cache
+  dbn = relu_backward(dout, relu_cache)
+  da, dgamma, dbeta = batchnorm_backward(dbn, bn_cache)
+  dx, dw, db = affine_backward(da, fc_cache)
+  return dx, dw, db, dgamma, dbeta
