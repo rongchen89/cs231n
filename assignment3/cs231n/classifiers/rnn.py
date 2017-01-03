@@ -141,7 +141,10 @@ class CaptioningRNN(object):
     # word_embedding_out: shape(N, T, W)
     word_embedding_out, word_embedding_cache = word_embedding_forward(captions_in, W_embed)
     # rnn_h: shape(N, T, H)
-    rnn_h, rnn_cache = rnn_forward(word_embedding_out, init_hidden, Wx, Wh, b)
+    if self.cell_type == 'rnn':
+        rnn_h, rnn_cache = rnn_forward(word_embedding_out, init_hidden, Wx, Wh, b)
+    elif self.cell_type == 'lstm':
+        rnn_h, rnn_cache = lstm_forward(word_embedding_out, init_hidden, Wx, Wh, b)
     # affine_out: shape(N, T, V)
     affine_out, affine_cache = temporal_affine_forward(rnn_h, W_vocab, b_vocab)
 
@@ -151,7 +154,10 @@ class CaptioningRNN(object):
     grads['b_vocab'] = db_vocab
     grads['W_vocab'] = dW_vocab
 
-    dword_embedding_out, dinit_hidden, dWx, dWh, db = rnn_backward(drnn_h, rnn_cache)
+    if self.cell_type == 'rnn':
+        dword_embedding_out, dinit_hidden, dWx, dWh, db = rnn_backward(drnn_h, rnn_cache)
+    elif self.cell_type == 'lstm':
+        dword_embedding_out, dinit_hidden, dWx, dWh, db = lstm_backward(drnn_h, rnn_cache)
     grads['Wx'] = dWx
     grads['Wh'] = dWh
     grads['b'] = db
@@ -227,13 +233,17 @@ class CaptioningRNN(object):
     _, D = W_embed.shape
     prev_words = self._start * np.ones(N)
     pre_h = init_hidden
+    pre_c = np.zeros_like(pre_h)
     for t in xrange(max_length):
         # step 1
         word_embeddings = np.zeros((N, D))
         for n in xrange(N):
             word_embeddings[n, :] = W_embed[int(prev_words[n])]
         # step 2
-        pre_h, _ = rnn_step_forward(word_embeddings, pre_h, Wx, Wh, b)
+        if self.cell_type == 'rnn':
+            pre_h, _ = rnn_step_forward(word_embeddings, pre_h, Wx, Wh, b)
+        elif self.cell_type == 'lstm':
+            pre_h, pre_c, _ = lstm_step_forward(word_embeddings, pre_h, pre_c, Wx, Wh, b)
         # step 3
         affine_out = pre_h.dot(W_vocab) + b_vocab
         # step 4
