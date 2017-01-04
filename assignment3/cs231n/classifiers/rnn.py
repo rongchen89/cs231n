@@ -115,7 +115,7 @@ class CaptioningRNN(object):
 
     loss, grads = 0.0, {}
     ############################################################################
-    # TODO: Implement the forward and backward passes for the CaptioningRNN.   #
+    # Implement the forward and backward passes for the CaptioningRNN.   #
     # In the forward pass you will need to do the following:                   #
     # (1) Use an affine transformation to compute the initial hidden state     #
     #     from the image features. This should produce an array of shape (N, H)#
@@ -208,7 +208,7 @@ class CaptioningRNN(object):
     W_vocab, b_vocab = self.params['W_vocab'], self.params['b_vocab']
 
     ###########################################################################
-    # TODO: Implement test-time sampling for the model. You will need to      #
+    # Implement test-time sampling for the model. You will need to      #
     # initialize the hidden state of the RNN by applying the learned affine   #
     # transform to the input image features. The first word that you feed to  #
     # the RNN should be the <START> token; its value is stored in the         #
